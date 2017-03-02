@@ -2,9 +2,11 @@
 
 Platfrom: Windows Visual Studio 2015    
 Language: C++11 or higher    
-
+Libevent Version: 2.2.0-alpha-dev or higher ?    
 
 这个项目是对 Libevent 的 C++ 包装，仅适用于 Windows 平台。
+
+整个 vsprotect 文件夹拷贝到 libevent 根目录即可使用。
 
 解决方案分为 6 个项目。
 
