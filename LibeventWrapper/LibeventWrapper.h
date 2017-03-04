@@ -16,9 +16,10 @@ public:
     {
         LIBEV_UNKNOWN = 0x00,
 
-        LIBEV_READ    = 0x01,
-        LIBEV_WRITE   = 0x02,
-        LIBEV_SIGNAL  = 0x04,
+        LIBEV_CONNECTED = 0x1,
+        LIBEV_READ    = 0x02,
+        LIBEV_WRITE   = 0x04,
+        LIBEV_SIGNAL  = 0x08,
 
         LIBEV_EOF     = 0x10,
         LIBEV_ERROR   = 0x20,
@@ -32,10 +33,10 @@ public:
         UINT8   m_IsValidOnWrite : 1;
         UINT8   m_IsValidOnEvent : 1;
 
-        std::function<HRESULT(intptr_t aSocket, sockaddr *aSockaddr)>   m_OnListener;
+        std::function<HRESULT(intptr_t fd, sockaddr *aSockaddr)>        m_OnListener;
         std::function<HRESULT(intptr_t fd, size_t aNeedReadSize)>       m_OnRead;
         std::function<HRESULT(intptr_t fd)>                             m_OnWrite;
-        std::function<HRESULT(LIBEVENT_EVENT_ENUM aEvents, intptr_t fd)>    m_OnEvent;
+        std::function<HRESULT(intptr_t fd, LIBEVENT_EVENT_ENUM aEvents)>m_OnEvent;
 
         LIBEVENT_CALLBACK_PACK()
         {

@@ -219,7 +219,7 @@ static void OnEvent(bufferevent *aEvbuf, short aEvents, void *aContext)
     UINT32 vEvent = static_cast<UINT32>(LibeventWrapper::LIBEVENT_EVENT_ENUM::LIBEV_UNKNOWN);
 
     if (aEvents & BEV_EVENT_CONNECTED)
-        return;
+        vEvent |= static_cast<UINT32>(LibeventWrapper::LIBEVENT_EVENT_ENUM::LIBEV_CONNECTED);
 
     if (aEvents & BEV_EVENT_READING)
         vEvent |= static_cast<UINT32>(LibeventWrapper::LIBEVENT_EVENT_ENUM::LIBEV_READ);
@@ -252,9 +252,12 @@ static void OnEvent(bufferevent *aEvbuf, short aEvents, void *aContext)
 
     if (vThis->m_CallbackPack.m_IsValidOnEvent)
     {
+        evutil_socket_t fd = FAILED(hr) ?
+            static_cast<evutil_socket_t>(-1) : bufferevent_getfd(aEvbuf);
+
         EVUTIL_SET_SOCKET_ERROR(hr);
-        hr = vThis->m_CallbackPack.m_OnEvent(
-            static_cast<LibeventWrapper::LIBEVENT_EVENT_ENUM>(vEvent), static_cast<int>(-1));
+        hr = vThis->m_CallbackPack.m_OnEvent(fd,
+            static_cast<LibeventWrapper::LIBEVENT_EVENT_ENUM>(vEvent));
     }
 }
 
@@ -275,7 +278,7 @@ static void OnBaseEvent(evutil_socket_t fd, short aEvents, void *aContext)
         if (vThis->m_CallbackPack.m_IsValidOnEvent)
         {
             hr = vThis->m_CallbackPack.m_OnEvent(
-                static_cast<LibeventWrapper::LIBEVENT_EVENT_ENUM>(vEvent), fd);
+                fd, static_cast<LibeventWrapper::LIBEVENT_EVENT_ENUM>(vEvent));
         }
     }
     else if (aEvents == EV_READ)
@@ -304,7 +307,7 @@ static void OnSignal(evutil_socket_t fd, short aEvents, void *aContext)
     if (vThis->m_CallbackPack.m_IsValidOnEvent)
     {
         hr = vThis->m_CallbackPack.m_OnEvent(
-            static_cast<LibeventWrapper::LIBEVENT_EVENT_ENUM>(vEvent), fd);
+            fd, static_cast<LibeventWrapper::LIBEVENT_EVENT_ENUM>(vEvent));
     }
 }
 
@@ -350,8 +353,8 @@ static void OnListener(evconnlistener *aListener, evutil_socket_t aSocket,
         {
             EVUTIL_SET_SOCKET_ERROR(hr);
             hr = vThis->m_CallbackPack.m_OnEvent(
-                LibeventWrapper::LIBEVENT_EVENT_ENUM::LIBEV_ERROR,
-                static_cast<evutil_socket_t>(-1));
+                static_cast<evutil_socket_t>(-1),
+                LibeventWrapper::LIBEVENT_EVENT_ENUM::LIBEV_ERROR);
         }
 
         return;
@@ -418,6 +421,11 @@ HRESULT LibeventWrapper::Connect(
             }
 
             m_UdpSocket = s;
+
+            if (m_CallbackPack.m_IsValidOnEvent)
+            {
+                m_CallbackPack.m_OnEvent(s, LIBEVENT_EVENT_ENUM::LIBEV_CONNECTED);
+            }
 
             hr = S_OK;
             break;
@@ -659,7 +667,7 @@ HRESULT LibeventWrapper::SendToForUDP(
         }
 
         if (SOCKET_ERROR == sendto(
-            m_UdpSocket, static_cast<const char*>(aData), aSize, 0, vTo, vTolen))
+            m_UdpSocket, static_cast<const char*>(aData), static_cast<int>(aSize), 0, vTo, vTolen))
         {
             hr = GetLastError();
             break;
@@ -686,7 +694,7 @@ HRESULT LibeventWrapper::SendToForUDP(
     for (;;)
     {
         if (SOCKET_ERROR == sendto(
-            fd, static_cast<const char*>(aData), aSize, 0, aTo, aTolen))
+            fd, static_cast<const char*>(aData), static_cast<int>(aSize), 0, aTo, aTolen))
         {
             hr = GetLastError();
             break;
@@ -716,7 +724,7 @@ size_t LibeventWrapper::ReceiveFrom(intptr_t fd, void *aData, size_t aSize)
 size_t LibeventWrapper::ReceiveFromForUDP(
     intptr_t fd, void * aData, size_t aSize, sockaddr *aFrom, int *aFromlen)
 {
-    return (size_t)recvfrom(fd, static_cast<char*>(aData), aSize, 0, aFrom, aFromlen);
+    return (size_t)recvfrom(fd, static_cast<char*>(aData), static_cast<int>(aSize), 0, aFrom, aFromlen);
 }
 
 HRESULT LibeventWrapper::SetTimeouts(

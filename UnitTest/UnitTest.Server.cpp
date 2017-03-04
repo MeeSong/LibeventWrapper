@@ -7,6 +7,9 @@
 
 LibeventWrapper g_libevent;
 static short SOCKET_TYPE = SOCK_STREAM;
+static short FAMILY = AF_INET6;
+static char *IP = "::1";
+static short PORT = 7788;
 
 static const char MESSAGE[] = "Hello, World!";
 
@@ -17,15 +20,29 @@ static HRESULT OnRead(intptr_t fd, size_t aNeedReadSize)
     if (SOCKET_TYPE == SOCK_DGRAM) // UDP
     {
         char vMsg[256] = { 0 };
-        sockaddr_in vFrom = { 0 };
-        int vFromlen = sizeof(vFrom);
-        g_libevent.ReceiveFromForUDP(fd, vMsg, ARRAYSIZE(vMsg),
-            (sockaddr*)&vFrom, &vFromlen);
+
+        sockaddr *vFrom = { 0 };
+        int vFromlen = 0;
+
+        sockaddr_in vFrom4 = { 0 };
+        sockaddr_in6 vFrom6 = { 0 };
+
+        if (FAMILY == AF_INET)
+        {
+            vFrom = (sockaddr *)&vFrom4;
+            vFromlen = sizeof(vFrom4);
+        }
+        else
+        {
+            vFrom = (sockaddr *)&vFrom6;
+            vFromlen = sizeof(vFrom6);
+        }
+
+        g_libevent.ReceiveFromForUDP(fd, vMsg, ARRAYSIZE(vMsg), vFrom, &vFromlen);
 
         printf("[%03d] %s \n", vCount++, vMsg);
 
-        g_libevent.SendToForUDP(fd, MESSAGE, ARRAYSIZE(MESSAGE),
-            (sockaddr*)&vFrom, vFromlen);
+        g_libevent.SendToForUDP(fd, MESSAGE, ARRAYSIZE(MESSAGE), vFrom, vFromlen);
     }
     else
     {
@@ -43,7 +60,7 @@ static HRESULT OnRead(intptr_t fd, size_t aNeedReadSize)
     return S_OK;
 }
 
-static HRESULT OnEvent(LibeventWrapper::LIBEVENT_EVENT_ENUM aEvents, intptr_t fd)
+static HRESULT OnEvent(intptr_t fd, LibeventWrapper::LIBEVENT_EVENT_ENUM aEvents)
 {
     if (aEvents & LibeventWrapper::LIBEVENT_EVENT_ENUM::LIBEV_SIGNAL)
     {
@@ -64,19 +81,48 @@ static HRESULT OnEvent(LibeventWrapper::LIBEVENT_EVENT_ENUM aEvents, intptr_t fd
     return S_OK;
 }
 
-static HRESULT OnListener(intptr_t aSocket, sockaddr *aSockaddr)
+static HRESULT OnListener(intptr_t fd, sockaddr *aSockaddr)
 {
     char vClientName[NI_MAXHOST] = { 0 };
-    GetNameInfoA(aSockaddr, sizeof(sockaddr_in),
-        vClientName, NI_MAXHOST, nullptr, 0, NI_NUMERICSERV);
 
-    auto vsa = (sockaddr_in*)aSockaddr;
+    if (FAMILY == AF_INET)
+    {
+        GetNameInfoA(aSockaddr, sizeof(sockaddr_in),
+            vClientName, NI_MAXHOST, nullptr, 0, NI_NUMERICSERV);
 
-    printf("Connect: [%s] %d.%d.%d.%d \n", vClientName,
-        vsa->sin_addr.S_un.S_un_b.s_b1,
-        vsa->sin_addr.S_un.S_un_b.s_b2,
-        vsa->sin_addr.S_un.S_un_b.s_b3,
-        vsa->sin_addr.S_un.S_un_b.s_b4);
+        auto vsa = (sockaddr_in*)aSockaddr;
+        printf("Connect: [%s] %d.%d.%d.%d \n", vClientName,
+            vsa->sin_addr.S_un.S_un_b.s_b1,
+            vsa->sin_addr.S_un.S_un_b.s_b2,
+            vsa->sin_addr.S_un.S_un_b.s_b3,
+            vsa->sin_addr.S_un.S_un_b.s_b4);
+    }
+    else
+    {
+        GetNameInfoA(aSockaddr, sizeof(sockaddr_in6),
+            vClientName, NI_MAXHOST, nullptr, 0, NI_NUMERICSERV);
+
+        auto vsa = (sockaddr_in6*)aSockaddr;
+        printf("Connect: [%s] %02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x \n", 
+            vClientName,
+            vsa->sin6_addr.u.Byte[0],
+            vsa->sin6_addr.u.Byte[1],
+            vsa->sin6_addr.u.Byte[2],
+            vsa->sin6_addr.u.Byte[3],
+            vsa->sin6_addr.u.Byte[4],
+            vsa->sin6_addr.u.Byte[5],
+            vsa->sin6_addr.u.Byte[6],
+            vsa->sin6_addr.u.Byte[7],
+            vsa->sin6_addr.u.Byte[8],
+            vsa->sin6_addr.u.Byte[9],
+            vsa->sin6_addr.u.Byte[10],
+            vsa->sin6_addr.u.Byte[11],
+            vsa->sin6_addr.u.Byte[12],
+            vsa->sin6_addr.u.Byte[13],
+            vsa->sin6_addr.u.Byte[14],
+            vsa->sin6_addr.u.Byte[15]);
+    }
+
 
     return S_OK;
 }
@@ -114,7 +160,7 @@ int main(int argc, char *argv[])
             break;
         }
 
-        hr = g_libevent.Listen("127.0.0.1", 7788, 0, AF_INET, SOCKET_TYPE);
+        hr = g_libevent.Listen(IP, PORT, 2, FAMILY, SOCKET_TYPE);
         if (FAILED(hr))
         {
             break;
