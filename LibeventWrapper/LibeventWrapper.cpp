@@ -253,7 +253,7 @@ static void OnEvent(bufferevent *aEvbuf, short aEvents, void *aContext)
     if (vThis->m_CallbackPack.m_IsValidOnEvent)
     {
         evutil_socket_t fd = FAILED(hr) ?
-            static_cast<evutil_socket_t>(-1) : bufferevent_getfd(aEvbuf);
+            static_cast<evutil_socket_t>(-1) : reinterpret_cast<intptr_t>(aEvbuf);
 
         EVUTIL_SET_SOCKET_ERROR(hr);
         hr = vThis->m_CallbackPack.m_OnEvent(fd,
@@ -349,20 +349,12 @@ static void OnListener(evconnlistener *aListener, evutil_socket_t aSocket,
             vEvbuf = nullptr;
         }
 
-        if (vThis->m_CallbackPack.m_IsValidOnEvent)
-        {
-            EVUTIL_SET_SOCKET_ERROR(hr);
-            hr = vThis->m_CallbackPack.m_OnEvent(
-                static_cast<evutil_socket_t>(-1),
-                LibeventWrapper::LIBEVENT_EVENT_ENUM::LIBEV_ERROR);
-        }
-
         return;
     }
 
     if (vThis->m_CallbackPack.m_IsValidOnListener)
     {
-        hr = vThis->m_CallbackPack.m_OnListener(aSocket, aSa);
+        hr = vThis->m_CallbackPack.m_OnListener(reinterpret_cast<intptr_t>(vEvbuf), aSa, aSocklen);
     }
 }
 
@@ -600,9 +592,26 @@ HRESULT LibeventWrapper::Listen(
             evutil_closesocket(s);
             s = INVALID_SOCKET;
         }
+        
+        if (m_CallbackPack.m_IsValidOnEvent)
+        {
+            EVUTIL_SET_SOCKET_ERROR(hr);
+            hr = m_CallbackPack.m_OnEvent(
+                static_cast<evutil_socket_t>(-1),
+                static_cast<LibeventWrapper::LIBEVENT_EVENT_ENUM>
+                (LibeventWrapper::LIBEV_LISTEN | LibeventWrapper::LIBEV_ERROR));
+        }
     }
 
     return hr;
+}
+
+void LibeventWrapper::Close(intptr_t fd)
+{
+    if (fd)
+    {
+        bufferevent_free((bufferevent*)fd);
+    }
 }
 
 HRESULT LibeventWrapper::GetLastError()
@@ -847,7 +856,7 @@ HRESULT LibeventWrapper::BuildSockaddr(
                 &vSa->sin_addr);
             if (!NT_SUCCESS(vStatus))
             {
-                HRESULT_FROM_NT(vStatus);
+                hr = HRESULT_FROM_NT(vStatus);
                 break;
             }
 
@@ -882,7 +891,7 @@ HRESULT LibeventWrapper::BuildSockaddr(
                 &vSa->sin6_addr);
             if (!NT_SUCCESS(vStatus))
             {
-                HRESULT_FROM_NT(vStatus);
+                hr = HRESULT_FROM_NT(vStatus);
                 break;
             }
 
